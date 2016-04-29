@@ -1,0 +1,107 @@
+options:
+  tags: 
+    type: string
+    default: ""
+    description: |
+        Comma separated list of global tags.
+        ie, 'dc=us-east-1,rack=1a' will tag all metrics with dc=us-east-1 and rack=1a
+  interval: 
+    type: string
+    default: "10s"
+    description: "Default data collection interval for all plugins"
+  round_interval: 
+    type: boolean
+    default: true
+    description: | 
+        Rounds collection interval to 'interval'
+        ie, if interval="10s" then always collect on :00, :10, :20, etc.
+  flush_interval: 
+    type: string
+    default: "10s"
+    description: |
+        Default data flushing interval for all outputs. You should not set this below
+        interval. Maximum flush_interval will be flush_interval + flush_jitter
+  flush_jitter: 
+    type: string
+    default: "0s"
+    description: |
+        Jitter the flush interval by a random amount. This is primarily to avoid
+        large write spikes for users running a large number of telegraf instances.
+        ie, a jitter of 5s and interval 10s means flushes will happen every 10-15s
+  collection_jitter:
+    type: string
+    default: "0s"
+    description: |
+        Collection jitter is used to jitter the collection by a random amount.
+        Each plugin will sleep for a random time within jitter before collecting.
+        This can be used to avoid many plugins querying things like sysfs at the
+        same time, which can have a measurable effect on the system.
+  metric_buffer_limit:
+    type: int
+    default: 10000
+    description: |
+        Telegraf will cache metric_buffer_limit metrics for each output, and will
+        flush this buffer on a successful write.
+  debug: 
+    type: boolean
+    default: false
+    description: "Run telegraf in debug mode"
+  quiet: 
+    type: boolean
+    default: false
+    description: "Run telegraf in quiet mode"
+  hostname:
+    type: string
+    default: ""
+    description: |
+       Override default hostname, if empty use os.Hostname()
+       Supports using UNIT_NAME as the value, and the charm will use a sanitized unit 
+       name, e.g: service_name-0
+  inputs_config: 
+    type: string
+    default: ""
+    description: "[inputs.xxx] sections as base64 string"
+  outputs_config: 
+    type: string
+    default: ""
+    description: "[outputs.xxx] sections as base64 string"
+  package_name:
+    default: "telegraf_0.10.1-1_amd64.deb" 
+    type: string
+    description: |
+        Filename of telegraf deb package.  If this matches the
+        name of a file in the files charm directory the package will be
+        installed from there, otherwise it will try to install it from
+        the repository provided by apt_repository.
+  apt_repository:
+    default: ""
+    type: string
+    description: "An apt sources.list line for a repository containing the telegraf package"
+  apt_repository_key:
+    default: ""
+    type: string
+    description: "GPG key for apt_repository"
+  extra_options:
+    default: ""
+    type: string 
+    description: |
+        YAML with extra options for out|inputs managed by relations or in the default config.
+        example:
+          inputs:
+              cpu:
+                  percpu: false
+                  fielddrop: ["time_*"]
+              disk:
+                  mount_points: ["/"]
+                  ignore_fs: ["tmpfs", "devtmpfs"]
+              elasticsearch:
+                  local: false 
+                  cluster_health: true
+              postgresql:
+                  databases: ["foo", "bar"]
+                  tagpass: 
+                      db: ["template", "postgres"]
+          outputs:
+              influxdb:
+                  precision: ms
+

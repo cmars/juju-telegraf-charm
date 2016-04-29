@@ -1,0 +1,7 @@
+coverage
+flake8
+ipython
+ipdb
+pytest 
+pytest-cov 
+charms.reactive

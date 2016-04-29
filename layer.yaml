@@ -1,0 +1,8 @@
+includes: 
+    - layer:basic
+    - interface:elasticsearch
+    - interface:influxdb-api
+    - interface:memcache
+    - interface:mongodb
+    - interface:pgsql
+    - interface:juju-info

@@ -1,0 +1,4 @@
+name: apache
+summary: Basic apache website interface
+version: 1
+repo: https://git.launchpad.net/~verterok/charms/+source/apache-website

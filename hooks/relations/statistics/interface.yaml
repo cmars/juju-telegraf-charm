@@ -1,0 +1,4 @@
+name: haproxy-statistics
+summary: Basic haproxy statistics interface
+version: 1
+repo: https://git.launchpad.net/~verterok/charms/+source/haproxy-statistics
