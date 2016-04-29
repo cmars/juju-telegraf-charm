@@ -74,11 +74,11 @@ options:
         installed from there, otherwise it will try to install it from
         the repository provided by apt_repository.
   apt_repository:
-    default: ""
+    default: "deb http://ppa.launchpad.net/telegraf-devs/ppa/ubuntu trusty main"
     type: string
     description: "An apt sources.list line for a repository containing the telegraf package"
   apt_repository_key:
-    default: ""
+    default: "C94406F5"
     type: string
     description: "GPG key for apt_repository"
   extra_options:
