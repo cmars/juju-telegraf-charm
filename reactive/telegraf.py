@@ -307,7 +307,7 @@ def postgresql_input(db):
 
 @when('haproxy.available')
 @when_not('plugins.haproxy.configured')
-def haproxy_input(service_name):
+def haproxy_input(haproxy):
     template = """
 [[inputs.haproxy]]
   servers = {{ servers }}
@@ -349,7 +349,7 @@ def haproxy_input(service_name):
 
 @when('apache.available')
 @when_not('plugins.apache.configured')
-def apache_input(service_name):
+def apache_input(apache):
     template = """
 [[inputs.apache]]
   urls = {{ urls }}
@@ -385,7 +385,7 @@ def apache_input(service_name):
 
 @when('influxdb-api.available')
 @when_not('plugins.influxdb-api.configured')
-def influxdb_api_output(service_name):
+def influxdb_api_output(influxdb):
     required_keys = ['hostname', 'port', 'user', 'password']
     rels = hookenv.relations_of_type('influxdb-api')
     endpoints = []

@@ -7,8 +7,9 @@ from functools import partial
 
 import pytest
 
-import reactive
+from charmhelpers.core.templating import render
 
+import reactive
 
 os.environ['CHARM_DIR'] = os.path.join(os.path.dirname(reactive.__file__), "../")
 
@@ -169,16 +170,76 @@ def test_memcached_input_no_relations(monkeypatch, config_dir):
     assert not config_dir.join('memcached.conf').exists()
 
 
-def test_mongodb_input():
-    assert False
+def test_mongodb_input(monkeypatch, config_dir, config):
+    relations = [{'private-address': '1.2.3.4', 'port': 1234}]
+    monkeypatch.setattr(telegraf.hookenv, 'relations_of_type', lambda n: relations)
+    telegraf.mongodb_input('test')
+    expected = """
+[[inputs.mongodb]]
+  servers = ["1.2.3.4:1234"]
+"""
+    assert config_dir.join('mongodb.conf').read().strip() == expected.strip()
 
 
-def test_postgresql_input():
-    assert False
+def test_mongodb_input_no_relations(monkeypatch, config_dir):
+    monkeypatch.setattr(telegraf.hookenv, 'relations_of_type', lambda n: [])
+    telegraf.mongodb_input('test')
+    assert not config_dir.join('mongodb.conf').exists()
 
 
-def test_haproxy_input():
-    assert False
+def test_postgresql_input(monkeypatch, config_dir, config):
+    relations = [{'host': '1.2.3.4',
+                  'port': 1234,
+                  'user': 'foo',
+                  'password': 'bar',
+                  'database': 'the-db-name',
+                  'allowed-units': ['telegraf-0']}]
+    monkeypatch.setattr(telegraf.hookenv, 'relations_of_type', lambda n: relations)
+    telegraf.postgresql_input('test')
+    expected = """
+[[inputs.postgresql]]
+  address = "host=1.2.3.4 user=foo password=bar dbname=the-db-name"
+"""
+    assert config_dir.join('postgresql.conf').read().strip() == expected.strip()
+
+
+def test_postgresql_input_no_relations(monkeypatch, config_dir):
+    monkeypatch.setattr(telegraf.hookenv, 'relations_of_type', lambda n: [])
+    telegraf.postgresql_input('test')
+    assert not config_dir.join('postgresql.conf').exists()
+
+
+def test_haproxy_input(monkeypatch, config_dir, config):
+    relations = [{'private-address': '1.2.3.4',
+                  'port': 1234,
+                  'user': 'foo',
+                  'password': 'bar',
+                  'enabled': 'True'}]
+    monkeypatch.setattr(telegraf.hookenv, 'relations_of_type', lambda n: relations)
+    monkeypatch.setattr(telegraf.hookenv, 'unit_private_ip', lambda: '1.2.3.4')
+    telegraf.haproxy_input('test')
+    expected = """
+[[inputs.haproxy]]
+  servers = ["http://foo:bar@localhost:1234"]
+"""
+    assert config_dir.join('haproxy.conf').read().strip() == expected.strip()
+
+
+def test_haproxy_input_no_relations(monkeypatch, config_dir):
+    monkeypatch.setattr(telegraf.hookenv, 'relations_of_type', lambda n: [])
+    telegraf.haproxy_input('test')
+    assert not config_dir.join('haproxy.conf').exists()
+
+
+def test_haproxy_input_not_enabled(monkeypatch, config_dir):
+    relations = [{'private-address': '1.2.3.4',
+                  'port': 1234,
+                  'user': 'foo',
+                  'password': 'bar',
+                  'enabled': 'False'}]
+    monkeypatch.setattr(telegraf.hookenv, 'relations_of_type', lambda n: relations)
+    telegraf.haproxy_input('test')
+    assert not config_dir.join('haproxy.conf').exists()
 
 
 def test_apache_input(monkeypatch, config_dir, config):
@@ -192,11 +253,22 @@ def test_apache_input(monkeypatch, config_dir, config):
 """
     assert config_dir.join('apache.conf').read().strip() == expected.strip()
 
+
 def test_apache_input_no_relations(monkeypatch, config_dir):
     monkeypatch.setattr(telegraf.hookenv, 'relations_of_type', lambda n: [])
     telegraf.apache_input('test')
     assert not config_dir.join('apache.conf').exists()
 
 
-def test_influxdb_api_output():
-    assert False
+def test_influxdb_api_output(monkeypatch, config_dir, config):
+    relations = [{'hostname': '1.2.3.4',
+                  'port': 1234,
+                  'user': 'foo',
+                  'password': 'bar'}]
+    monkeypatch.setattr(telegraf.hookenv, 'relations_of_type', lambda n: relations)
+    telegraf.influxdb_api_output('test')
+    expected = render(source='influxdb-api.conf.tmpl', target=None,
+                      context={'username': 'foo',
+                               'password': 'bar',
+                               'urls': '["http://1.2.3.4:1234"]'})
+    assert config_dir.join('influxdb-api.conf').read().strip() == expected.strip()
