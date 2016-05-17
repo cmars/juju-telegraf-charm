@@ -137,7 +137,7 @@ def install_telegraf():
         add_source(config['apt_repository'],
                    config['apt_repository_key'])
         apt_update()
-    apt_install(config['package_name'])
+    apt_install(config['package_name'], fatal=True)
     set_state('telegraf.installed')
 
 
