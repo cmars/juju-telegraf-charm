@@ -1,7 +1,7 @@
 import base64
 import os
-import yaml
 import json
+import yaml
 
 from charms.reactive import (
     when,
@@ -231,7 +231,6 @@ def memcached_input(memcache):
     required_keys = ['host', 'port']
     rels = hookenv.relations_of_type('memcached')
     addresses = []
-    inputs = []
     for rel in rels:
         if all([rel.get(key) for key in required_keys]):
             addr = rel['host']
@@ -241,10 +240,10 @@ def memcached_input(memcache):
     config_path = '{}/{}.conf'.format(CONFIG_DIR, 'memcached')
     if addresses:
         context = {"servers": json.dumps(addresses)}
-        inputs.append(render_template(template, context) + \
-                      render_extra_options("inputs", "memcached"))
+        input_config = render_template(template, context) + \
+            render_extra_options("inputs", "memcached")
         hookenv.log("Updating {} plugin config file".format('memcached'))
-        host.write_file(config_path, '\n'.join(inputs).encode('utf-8'))
+        host.write_file(config_path, input_config.encode('utf-8'))
         set_state('plugins.memcached.configured')
     elif os.path.exists(config_path):
         os.unlink(config_path)
@@ -259,7 +258,6 @@ def mongodb_input(mongodb):
 """
     rels = hookenv.relations_of_type('mongodb')
     mongo_addresses = []
-    inputs = []
     for rel in rels:
         addr = rel['private-address']
         port = rel.get('port', None)
@@ -271,10 +269,10 @@ def mongodb_input(mongodb):
     config_path = '{}/{}.conf'.format(CONFIG_DIR, 'mongodb')
     if mongo_addresses:
         context = {"servers": json.dumps(mongo_addresses)}
-        inputs.append(render_template(template, context) + \
-                      render_extra_options("inputs", "mongodb"))
+        input_config = render_template(template, context) + \
+            render_extra_options("inputs", "mongodb")
         hookenv.log("Updating {} plugin config file".format('mongodb'))
-        host.write_file(config_path, '\n'.join(inputs).encode('utf-8'))
+        host.write_file(config_path, input_config.encode('utf-8'))
         set_state('plugins.mongodb.configured')
     elif os.path.exists(config_path):
         os.unlink(config_path)
@@ -314,7 +312,6 @@ def haproxy_input(haproxy):
 """
     rels = hookenv.relations_of_type('haproxy')
     haproxy_addresses = []
-    inputs = []
     for rel in rels:
         enabled = rel.get('enabled', False)
         # Juju gives us a string instead of a boolean, fix it
@@ -338,10 +335,10 @@ def haproxy_input(haproxy):
         haproxy_addresses.append(haproxy_address)
     config_path = '{}/{}.conf'.format(CONFIG_DIR, 'haproxy')
     if haproxy_addresses:
-        inputs.append(render_template(template, {"servers": json.dumps(haproxy_addresses)}) + \
-                      render_extra_options("inputs", "haproxy"))
+        input_config = render_template(template, {"servers": json.dumps(haproxy_addresses)}) + \
+            render_extra_options("inputs", "haproxy")
         hookenv.log("Updating {} plugin config file".format('haproxy'))
-        host.write_file(config_path, '\n'.join(inputs).encode('utf-8'))
+        host.write_file(config_path, input_config.encode('utf-8'))
         set_state('plugins.haproxy.configured')
     elif os.path.exists(config_path):
         os.unlink(config_path)
@@ -371,13 +368,12 @@ def apache_input(apache):
         addr = rel['private-address']
         url = 'http://{}:{}/server-status?auto'.format(addr, port)
         urls.append(url)
-    inputs = []
     if urls:
         context = {"urls": json.dumps(urls)}
-        inputs.append(render_template(template, context) + \
-                      render_extra_options("inputs", "apache"))
+        input_config = render_template(template, context) + \
+                      render_extra_options("inputs", "apache")
         hookenv.log("Updating {} plugin config file".format('apache'))
-        host.write_file(config_path, '\n'.join(inputs).encode('utf-8'))
+        host.write_file(config_path, input_config.encode('utf-8'))
         set_state('plugins.apache.configured')
     elif os.path.exists(config_path):
         os.unlink(config_path)
