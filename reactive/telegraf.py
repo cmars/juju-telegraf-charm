@@ -4,6 +4,7 @@ import json
 import yaml
 
 from charms.reactive import (
+    helpers,
     when,
     when_not,
     when_file_changed,
@@ -409,6 +410,6 @@ def influxdb_api_output(influxdb):
 
 
 @when('telegraf.configured')
-@when_file_changed(list_config_files())
 def start_or_restart():
-    host.service_restart('telegraf')
+    if helpers.any_file_changed(list_config_files()):
+        host.service_restart('telegraf')
