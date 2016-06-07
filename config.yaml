@@ -60,13 +60,13 @@ options:
   inputs_config: 
     type: string
     default: ""
-    description: "[inputs.xxx] sections as base64 string"
+    description: "[inputs.xxx] sections as a string, this override default input plugins."
   outputs_config: 
     type: string
     default: ""
-    description: "[outputs.xxx] sections as base64 string"
+    description: "[outputs.xxx] sections as a string"
   package_name:
-    default: "telegraf_0.10.1-1_amd64.deb" 
+    default: "telegraf" 
     type: string
     description: |
         Filename of telegraf deb package.  If this matches the
@@ -104,4 +104,9 @@ options:
           outputs:
               influxdb:
                   precision: ms
-
+  extra_plugins: 
+    default: ""
+    type: string 
+    description: |
+        Extra plugins, manually configured. This is expected to be a string 
+        and will be saved "as is" in /etc/telegraf/telegraf.d/extra_plugins.conf

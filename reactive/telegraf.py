@@ -1,4 +1,3 @@
-import base64
 import os
 import json
 import yaml
@@ -10,8 +9,9 @@ from charms.reactive import (
     when_file_changed,
     set_state,
     remove_state,
+    helpers,
 )
-from charms.reactive.bus import get_state
+from charms.reactive.bus import get_states
 
 from charmhelpers.core import hookenv, host
 from charmhelpers.core.templating import render
@@ -19,13 +19,20 @@ from charmhelpers.fetch import apt_install, apt_update, add_source
 
 from jinja2 import Template
 
+BASE_DIR = '/etc/telegraf'
 
-CONFIG_FILE = '/etc/telegraf/telegraf.conf'
+CONFIG_FILE = 'telegraf.conf'
 
-CONFIG_DIR = '/etc/telegraf/telegraf.d'
+CONFIG_DIR = 'telegraf.d'
 
 
 # Utilities #
+def get_main_config_path():
+    return os.path.join(BASE_DIR, CONFIG_FILE)
+
+
+def get_configs_dir():
+    return os.path.join(BASE_DIR, CONFIG_DIR)
 
 
 def list_supported_plugins():
@@ -34,12 +41,15 @@ def list_supported_plugins():
 
 
 def list_config_files():
-    config_files = [CONFIG_FILE]
+    config_files = [get_main_config_path()]
     # only include config files for configured plugins
+    current_states = get_states()
     for plugin in list_supported_plugins():
-        if get_state('plugins.{}.configured'.format(plugin)) is not None:
-            config_path = '{}/{}.conf'.format(CONFIG_DIR, plugin)
+        if 'plugins.{}.configured'.format(plugin) in current_states.keys():
+            config_path = '{}/{}.conf'.format(get_configs_dir(), plugin)
             config_files.append(config_path)
+    if 'extra_plugins.configured' in current_states.keys():
+        config_files.append('{}/extra_plugins.conf'.format(get_configs_dir()))
     return config_files
 
 
@@ -147,8 +157,8 @@ def install_telegraf():
 def configure_telegraf():
     config = hookenv.config()
     context = config.copy()
-    inputs = base64.b64decode(config['inputs_config'])
-    outputs = base64.b64decode(config['outputs_config'])
+    inputs = config.get('inputs_config', '')
+    outputs = config.get('outputs_config', '')
     tags = []
     if config['tags']:
         for tag in config['tags'].split(','):
@@ -165,19 +175,20 @@ def configure_telegraf():
     else:
         context["outputs"] = ""
         hookenv.log("No output plugins in main config.")
-    remote_unit_name = get_remote_unit_name()
+    config_path = get_main_config_path()
     if config["hostname"] == "UNIT_NAME":
+        remote_unit_name = get_remote_unit_name()
         if remote_unit_name is not None:
             context["hostname"] = remote_unit_name.replace('/', '-')
         else:
             hookenv.log("Waiting for relation to render config file.")
             # if UNIT_NAME in hostname config and relation not yet available,
             # make telegraf unable to start to not get weird metrics names
-            if os.path.exists(CONFIG_FILE):
-                os.unlink(CONFIG_FILE)
+            if os.path.exists(config_path):
+                os.unlink(config_path)
             return
     hookenv.log("Updating main config file")
-    render(source='telegraf.conf.tmpl', target=CONFIG_FILE, context=context)
+    render(source='telegraf.conf.tmpl', target=config_path, context=context)
     set_state('telegraf.configured')
 
 
@@ -190,7 +201,20 @@ def handle_config_changes():
     if config.changed('apt_repository') or config.changed('package_name'):
         remove_state('telegraf.installed')
     # if something else changed, let's reconfigure telegraf itself just in case
+    if config.changed('extra_plugins'):
+        remove_state('extra_plugins.configured')
     remove_state('telegraf.configured')
+
+
+@when('telegraf.configured')
+@when_not('extra_plugins.configured')
+def configure_extra_plugins():
+    config = hookenv.config()
+    plugins = config['extra_plugins']
+    if plugins:
+        config_path = '{}/extra_plugins.conf'.format(get_configs_dir())
+        host.write_file(config_path, plugins)
+        set_state('extra_plugins.configured')
 
 
 @when('elasticsearch.available')
@@ -209,7 +233,7 @@ def elasticsearch_input(es):
             hookenv.log('No host received for relation: {}.'.format(rel))
             continue
         hosts.append("http://{}:{}".format(es_host, port))
-    config_path = '{}/{}.conf'.format(CONFIG_DIR, 'elasticsearch')
+    config_path = '{}/{}.conf'.format(get_configs_dir(), 'elasticsearch')
     if hosts:
         context = {"servers": json.dumps(hosts)}
         input_config = render_template(template, context) + \
@@ -238,7 +262,7 @@ def memcached_input(memcache):
             port = rel['port']
             address = '{}:{}'.format(addr, port)
             addresses.append(address)
-    config_path = '{}/{}.conf'.format(CONFIG_DIR, 'memcached')
+    config_path = '{}/{}.conf'.format(get_configs_dir(), 'memcached')
     if addresses:
         context = {"servers": json.dumps(addresses)}
         input_config = render_template(template, context) + \
@@ -267,7 +291,7 @@ def mongodb_input(mongodb):
         else:
             mongo_address = addr
         mongo_addresses.append(mongo_address)
-    config_path = '{}/{}.conf'.format(CONFIG_DIR, 'mongodb')
+    config_path = '{}/{}.conf'.format(get_configs_dir(), 'mongodb')
     if mongo_addresses:
         context = {"servers": json.dumps(mongo_addresses)}
         input_config = render_template(template, context) + \
@@ -295,7 +319,7 @@ def postgresql_input(db):
             context = rel.copy()
             inputs.append(render_template(template, context) + \
                           render_extra_options("inputs", "postgresql"))
-    config_path = '{}/{}.conf'.format(CONFIG_DIR, 'postgresql')
+    config_path = '{}/{}.conf'.format(get_configs_dir(), 'postgresql')
     if inputs:
         hookenv.log("Updating {} plugin config file".format('postgresql'))
         host.write_file(config_path, '\n'.join(inputs).encode('utf-8'))
@@ -334,7 +358,7 @@ def haproxy_input(haproxy):
             userpass += ":{}".format(password)
         haproxy_address = 'http://{}@{}:{}'.format(userpass, addr, port)
         haproxy_addresses.append(haproxy_address)
-    config_path = '{}/{}.conf'.format(CONFIG_DIR, 'haproxy')
+    config_path = '{}/{}.conf'.format(get_configs_dir(), 'haproxy')
     if haproxy_addresses:
         input_config = render_template(template, {"servers": json.dumps(haproxy_addresses)}) + \
             render_extra_options("inputs", "haproxy")
@@ -352,7 +376,7 @@ def apache_input(apache):
 [[inputs.apache]]
   urls = {{ urls }}
 """
-    config_path = '{}/{}.conf'.format(CONFIG_DIR, 'apache')
+    config_path = '{}/{}.conf'.format(get_configs_dir(), 'apache')
     port = '8080'
     vhost = render(source='apache-server-status.tmpl',
                    target=None,
@@ -395,7 +419,7 @@ def influxdb_api_output(influxdb):
                 user = rel['user']
             if password is None:
                 password = rel['password']
-    config_path = '{}/{}.conf'.format(CONFIG_DIR, 'influxdb-api')
+    config_path = '{}/{}.conf'.format(get_configs_dir(), 'influxdb-api')
     if endpoints:
         hookenv.log("Updating {} plugin config file".format('influxdb-api'))
         content = render(source='influxdb-api.conf.tmpl', target=None,
