@@ -1,4 +1,3 @@
-import base64
 import os
 import json
 import yaml
@@ -146,8 +145,8 @@ def install_telegraf():
 def configure_telegraf():
     config = hookenv.config()
     context = config.copy()
-    inputs = base64.b64decode(config['inputs_config'])
-    outputs = base64.b64decode(config['outputs_config'])
+    inputs = config.get('inputs_config', '')
+    outputs = config.get('outputs_config', '')
     tags = []
     if config['tags']:
         for tag in config['tags'].split(','):
