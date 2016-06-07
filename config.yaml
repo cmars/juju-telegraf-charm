@@ -104,4 +104,9 @@ options:
           outputs:
               influxdb:
                   precision: ms
-
+  extra_plugins: 
+    default: ""
+    type: string 
+    description: |
+        Extra plugins, manually configured. This is expected to be a string 
+        and will be saved "as is" in /etc/telegraf/telegraf.d/extra_plugins.conf
