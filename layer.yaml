@@ -6,3 +6,4 @@ includes:
     - interface:mongodb
     - interface:pgsql
     - interface:juju-info
+repo: https://git.launchpad.net/~verterok/charms/+source/telegraf
