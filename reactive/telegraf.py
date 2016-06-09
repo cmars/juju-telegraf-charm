@@ -37,6 +37,8 @@ def get_configs_dir():
 
 def list_supported_plugins():
     return [k for k in hookenv.metadata()['requires'].keys()
+            if k != 'juju-info'] + \
+        [k for k in hookenv.metadata()['provides'].keys()
             if k != 'juju-info']
 
 
@@ -317,7 +319,7 @@ def postgresql_input(db):
         if all([rel.get(key) for key in required_keys]) \
                 and hookenv.local_unit() in rel.get('allowed-units'):
             context = rel.copy()
-            inputs.append(render_template(template, context) + \
+            inputs.append(render_template(template, context) +
                           render_extra_options("inputs", "postgresql"))
     config_path = '{}/{}.conf'.format(get_configs_dir(), 'postgresql')
     if inputs:
@@ -396,7 +398,7 @@ def apache_input(apache):
     if urls:
         context = {"urls": json.dumps(urls)}
         input_config = render_template(template, context) + \
-                      render_extra_options("inputs", "apache")
+            render_extra_options("inputs", "apache")
         hookenv.log("Updating {} plugin config file".format('apache'))
         host.write_file(config_path, input_config.encode('utf-8'))
         set_state('plugins.apache.configured')
@@ -433,7 +435,48 @@ def influxdb_api_output(influxdb):
         os.unlink(config_path)
 
 
+@when('prometheus-client.available')
+@when_not('plugins.prometheus-client.configured')
+def prometheus_client(prometheus):
+    template = """
+[[outputs.prometheus_client]]
+  listen = "{{ listen }}"
+"""
+    port = 9126
+    extra_options = get_extra_options()
+    options = extra_options['outputs'].get('prometheus-client', {})
+    listen = options.pop('listen', None)
+    if listen is not None:
+        hookenv.log("Configuring prometheus_client plugin to listen on: '{}'".format(listen))
+        port = int(listen.split(":", 1)[1])
+    else:
+        listen = ":{}".format(port)
+    prometheus.configure(port)
+    config_path = '{}/{}.conf'.format(get_configs_dir(), 'prometheus-client')
+    hookenv.log("Updating {} plugin config file".format('prometheus-client'))
+    context = {"listen": listen}
+    content = render_template(template, context) + \
+        render_extra_options("outputs", "prometheus-client")
+    host.write_file(config_path, content.encode('utf-8'))
+    set_state('plugins.prometheus-client.configured')
+
+
+@when_not('prometheus-client.available')
+@when('plugins.prometheus-client.configured')
+def prometheus_client_departed():
+    hookenv.log("prometheus-client relation not available")
+    config_path = '{}/{}.conf'.format(get_configs_dir(), 'prometheus-client')
+    rels = hookenv.relations_of_type('prometheus-client')
+    if not rels and os.path.exists(config_path):
+        hookenv.log("Deleting {} plugin config file".format('prometheus-client'))
+        os.unlink(config_path)
+        remove_state('plugins.prometheus-client.configured')
+
+
 @when('telegraf.configured')
 def start_or_restart():
-    if helpers.any_file_changed(list_config_files()):
+    states = sorted([k for k in get_states().keys()
+                     if k.startswith('plugins') or k.startswith('extra_plugins')])
+    if helpers.any_file_changed(list_config_files()) or \
+            helpers.data_changed('active_plugins', states or ''):
         host.service_restart('telegraf')

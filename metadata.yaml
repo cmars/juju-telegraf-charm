@@ -34,3 +34,6 @@ requires:
   juju-info:
     interface: juju-info
     scope: container
+provides:
+  prometheus-client:
+    interface: http
