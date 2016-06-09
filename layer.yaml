@@ -7,4 +7,8 @@ includes:
     - interface:pgsql
     - interface:juju-info
     - interface:http
+options:
+    basic:
+        packages:
+            - python3-yaml
 repo: https://git.launchpad.net/~verterok/charms/+source/telegraf

@@ -13,7 +13,6 @@ subordinate: true
 requires:
   postgresql: 
     interface: pgsql
-    scope: container
   mongodb: 
     interface: mongodb
     scope: container

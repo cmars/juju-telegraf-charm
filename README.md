@@ -48,6 +48,13 @@ This extra options will only be applied to plugins defined in templates/base_inp
 
 For the apache input plugin, the charm provides the apache relation which uses apache-website interface. Current apache charm disables mod_status  and in order to telegraf apache input to work 'status' should be removed from the list of disable_modules in the apache charm config.
 
+## Postgresql input 
+
+Due to a [bug/regression](https://bugs.launchpad.net/postgresql-charm/+bug/1560262) in the new postgresql-charm in order to get actual postgresql metrics, two relations need to be established between telegraf and the postgresql service, first a plain juju-info relation to get telegraf setup and then a regular postgresql/db one. e.g:
+
+juju add-relation telegraf:juju-info postgresql:juju-info 
+juju add-relation telegraf:postgresql postgresql:db
+
 ## Output 
 
 The only output plugin supported via relation is influxdb, any other output plugin needs to be configured manually (via juju set)

@@ -276,7 +276,7 @@ def memcached_input(memcache):
         os.unlink(config_path)
 
 
-@when('mongodb.available')
+@when('mongodb.database.available')
 @when_not('plugins.mongodb.configured')
 def mongodb_input(mongodb):
     template = """
@@ -305,7 +305,7 @@ def mongodb_input(mongodb):
         os.unlink(config_path)
 
 
-@when('postgresql.available')
+@when('postgresql.database.available')
 @when_not('plugins.postgresql.configured')
 def postgresql_input(db):
     template = """
@@ -317,7 +317,8 @@ def postgresql_input(db):
     inputs = []
     for rel in rels:
         if all([rel.get(key) for key in required_keys]) \
-                and hookenv.local_unit() in rel.get('allowed-units'):
+                and hookenv.local_unit() in rel.get('allowed-units') \
+                and rel['private-address'] == hookenv.unit_private_ip():
             context = rel.copy()
             inputs.append(render_template(template, context) +
                           render_extra_options("inputs", "postgresql"))
