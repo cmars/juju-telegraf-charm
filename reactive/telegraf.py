@@ -27,6 +27,10 @@ CONFIG_DIR = 'telegraf.d'
 
 
 # Utilities #
+def get_templates_dir():
+    return os.path.join(hookenv.charm_dir(), 'templates')
+
+
 def get_main_config_path():
     return os.path.join(BASE_DIR, CONFIG_FILE)
 
@@ -66,7 +70,7 @@ def get_remote_unit_name():
 def render_base_inputs():
     extra_options = get_extra_options()
     # use base inputs from charm templates
-    with open(os.path.join(hookenv.charm_dir(), 'templates/base_inputs.conf'), 'r') as fd:
+    with open(os.path.join(get_templates_dir(), 'base_inputs.conf'), 'r') as fd:
         return render_template(
             fd.read(),
             {'extra_options': extra_options['inputs']})
@@ -190,7 +194,8 @@ def configure_telegraf():
                 os.unlink(config_path)
             return
     hookenv.log("Updating main config file")
-    render(source='telegraf.conf.tmpl', target=config_path, context=context)
+    render(source='telegraf.conf.tmpl', templates_dir=get_templates_dir(),
+           target=config_path, context=context)
     set_state('telegraf.configured')
 
 
@@ -215,7 +220,7 @@ def configure_extra_plugins():
     plugins = config['extra_plugins']
     if plugins:
         config_path = '{}/extra_plugins.conf'.format(get_configs_dir())
-        host.write_file(config_path, plugins)
+        host.write_file(config_path, plugins.encode('utf-8'))
         set_state('extra_plugins.configured')
 
 
@@ -382,6 +387,7 @@ def apache_input(apache):
     config_path = '{}/{}.conf'.format(get_configs_dir(), 'apache')
     port = '8080'
     vhost = render(source='apache-server-status.tmpl',
+                   templates_dir=get_templates_dir(),
                    target=None,
                    context={'port': port})
     relation_info = {"ports": port,
@@ -426,6 +432,7 @@ def influxdb_api_output(influxdb):
     if endpoints:
         hookenv.log("Updating {} plugin config file".format('influxdb-api'))
         content = render(source='influxdb-api.conf.tmpl', target=None,
+                         templates_dir=get_templates_dir(),
                          context={'urls': json.dumps(endpoints),
                                   'username': '{}'.format(user),
                                   'password': '{}'.format(password)})
@@ -480,4 +487,5 @@ def start_or_restart():
                      if k.startswith('plugins') or k.startswith('extra_plugins')])
     if helpers.any_file_changed(list_config_files()) or \
             helpers.data_changed('active_plugins', states or ''):
+        hookenv.log("Restarting telegraf")
         host.service_restart('telegraf')

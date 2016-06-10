@@ -17,8 +17,6 @@ from charmhelpers.core.templating import render
 
 import reactive
 
-os.environ['CHARM_DIR'] = os.path.join(os.path.dirname(reactive.__file__), "../")
-
 from reactive import telegraf
 
 
@@ -53,10 +51,25 @@ def cleanup(request):
         from charmhelpers.core import unitdata
         unitdata._KV = None
         # rm unit-state.db file
-        unit_state_db = os.path.join(os.environ['CHARM_DIR'], '.unit-state.db')
+        unit_state_db = os.path.join(telegraf.hookenv.charm_dir(), '.unit-state.db')
         if os.path.exists(unit_state_db):
             os.unlink(unit_state_db)
     request.addfinalizer(unit_state_cleanup)
+
+
+@pytest.fixture()
+def temp_charm_dir(monkeypatch, tmpdir):
+    charm_dir = tmpdir.mkdir("charm_dir")
+    os.environ['CHARM_DIR'] = charm_dir.strpath
+    # also monkeypatch get_templates_dir to fix the path
+    real_charm_dir = os.path.join(os.path.dirname(reactive.__file__), "../")
+    monkeypatch.setattr(telegraf, 'get_templates_dir',
+                        lambda: os.path.join(real_charm_dir, 'templates'))
+    # fix hookenv.metadata
+    with open(os.path.join(real_charm_dir, 'metadata.yaml')) as md:
+        metadata = yaml.safe_load(md)
+    monkeypatch.setattr(telegraf.hookenv, 'metadata', lambda: metadata)
+
 
 
 @pytest.fixture(autouse=True)
@@ -67,7 +80,7 @@ def temp_config_dir(monkeypatch, tmpdir):
 
 
 @pytest.fixture(autouse=True)
-def config(monkeypatch):
+def config(monkeypatch, temp_charm_dir):
     raw_config = yaml.load(open('config.yaml', 'r'))
     data = dict((k, v['default']) for k, v in raw_config['options'].items())
     config = Config(data)
@@ -280,7 +293,9 @@ def test_postgresql_input(monkeypatch, config):
                   'user': 'foo',
                   'password': 'bar',
                   'database': 'the-db-name',
-                  'allowed-units': ['telegraf-0']}]
+                  'allowed-units': ['telegraf-0'],
+                  'private-address': '1.2.3.4'}]
+    monkeypatch.setattr(telegraf.hookenv, 'unit_private_ip', lambda: '1.2.3.4')
     monkeypatch.setattr(telegraf.hookenv, 'relations_of_type', lambda n: relations)
     telegraf.postgresql_input('test')
     expected = """
@@ -355,6 +370,7 @@ def test_influxdb_api_output(monkeypatch, config):
     monkeypatch.setattr(telegraf.hookenv, 'relations_of_type', lambda n: relations)
     telegraf.influxdb_api_output('test')
     expected = render(source='influxdb-api.conf.tmpl', target=None,
+                      templates_dir=telegraf.get_templates_dir(),
                       context={'username': 'foo',
                                'password': 'bar',
                                'urls': '["http://1.2.3.4:1234"]'})
@@ -400,14 +416,13 @@ def test_config_changed_apt(mocker, config):
     apt_update = mocker.patch('reactive.telegraf.apt_update')
     add_source = mocker.patch('reactive.telegraf.add_source')
     bus.set_state('telegraf.installed')
-    bus.set_state('telegraf.configured')
     config.save()
     config['apt_repository'] = "ppa:test-repo"
     config['apt_repository_key'] = "test-repo-key"
     bus.set_state('config.changed')
     bus.dispatch()
     add_source.assert_called_once_with('ppa:test-repo', 'test-repo-key')
-    apt_update.assert_called_once()
+    assert apt_update.called and apt_update.call_count == 1
     apt_install.assert_called_once_with('telegraf', fatal=True)
     service_restart.assert_called_once_with('telegraf')
 
@@ -415,9 +430,9 @@ def test_config_changed_apt(mocker, config):
 def test_config_changed_extra_options(mocker, config):
     service_restart = mocker.patch('reactive.telegraf.host.service_restart')
     bus.set_state('telegraf.installed')
-    bus.set_state('telegraf.configured')
     bus.set_state('plugins.haproxy.configured')
     config.save()
+    config.load_previous()
     config['extra_options'] = yaml.dump({'inputs': {'haproxy': {'timeout': 10}}})
     bus.set_state('config.changed')
     bus.dispatch()
@@ -428,9 +443,9 @@ def test_config_changed_extra_options(mocker, config):
 def test_config_changed_extra_plugins(mocker, config):
     service_restart = mocker.patch('reactive.telegraf.host.service_restart')
     bus.set_state('telegraf.installed')
-    bus.set_state('telegraf.configured')
     assert not configs_dir().join('extra_plugins.conf').exists()
     config.save()
+    config.load_previous()
     # once the config is saved, change it. This will also trigger a service
     # restart
     config['extra_plugins'] = """[[inputs.foo]]
@@ -447,18 +462,15 @@ def test_config_changed_extra_plugins(mocker, config):
 
 def test_restart_on_output_plugin_relation_departed(mocker, monkeypatch, config):
     service_restart = mocker.patch('reactive.telegraf.host.service_restart')
+    monkeypatch.setattr(telegraf.hookenv, 'relations_of_type', lambda n: [])
+    bus.discover()
     bus.set_state('telegraf.installed')
     bus.set_state('telegraf.configured')
-    bus.set_state('prometheus-client.available')
-    bus.set_state('plugins.prometheus-client.configured')
-    configs_dir().join('prometheus-client.conf').write('empty')
-    relations = [1]
-    monkeypatch.setattr(telegraf.hookenv, 'relations_of_type', lambda n: relations)
-    persist_state()
-    bus.dispatch()
+    interface = mocker.Mock(spec=RelationBase)
+    interface.configure = mocker.Mock()
+    telegraf.prometheus_client(interface)
     assert configs_dir().join('prometheus-client.conf').exists()
-    relations.pop()
-    bus.remove_state('prometheus-client.available')
+    # dispatch, file should be gone and telegraf restarted.
     bus.dispatch()
     assert not configs_dir().join('prometheus-client.conf').exists()
     service_restart.assert_called_once_with('telegraf')
