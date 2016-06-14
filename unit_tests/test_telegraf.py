@@ -23,6 +23,8 @@ from reactive import telegraf
 @pytest.fixture(autouse=True)
 def setup(monkeypatch, tmpdir):
     monkeypatch.setitem(os.environ, 'JUJU_UNIT_NAME', 'telegraf-0')
+    monkeypatch.setattr(telegraf, 'get_remote_unit_name', lambda: 'remote-unit-0')
+    monkeypatch.setattr(telegraf, 'exec_timeout_supported', lambda: True)
     # patch host.write for non-root
     user = getpass.getuser()
     orig_write_file = telegraf.host.write_file
@@ -107,6 +109,21 @@ def persist_state():
 
 
 # Tests
+def test_get_remote_unit_name(monkeypatch):
+    monkeypatch.undo()
+    # fix hookenv.metadata
+    real_charm_dir = os.path.join(os.path.dirname(reactive.__file__), "../")
+    with open(os.path.join(real_charm_dir, 'metadata.yaml')) as md:
+        metadata = yaml.safe_load(md)
+    monkeypatch.setattr(telegraf.hookenv, 'metadata', lambda: metadata)
+    relations = []
+    monkeypatch.setattr(telegraf.hookenv, 'relations_of_type', lambda n: relations)
+    monkeypatch.setattr(telegraf.hookenv, 'unit_private_ip', lambda: '1.2.3.4')
+    assert telegraf.get_remote_unit_name() is None
+    relations = [{'private-address': '1.2.3.4', '__unit__': 'remote-0'}]
+    assert telegraf.get_remote_unit_name() == 'remote-0'
+
+
 def test_inputs_config_set(monkeypatch, config):
     config['inputs_config'] = """
     [[inputs.cpu]]
@@ -360,6 +377,109 @@ def test_apache_input_no_relations(monkeypatch):
     monkeypatch.setattr(telegraf.hookenv, 'relations_of_type', lambda n: [])
     telegraf.apache_input('test')
     assert not configs_dir().join('apache.conf').exists()
+
+
+def test_exec_input(mocker, monkeypatch):
+    interface = mocker.Mock(spec=RelationBase)
+    interface.commands = mocker.Mock()
+    command = {'commands': ['/srv/bin/test.sh', '/bin/true'],
+               'data_format': 'json',
+               'timeout': '5s',
+               'run_on_this_unit': True}
+    interface.commands.return_value = [command.copy()]
+    telegraf.exec_input(interface)
+    expected = """
+[[inputs.exec]]
+  commands = ['/srv/bin/test.sh', '/bin/true']
+  data_format = "json"
+  timeout = "5s"
+"""
+    assert configs_dir().join('exec.conf').read().strip() == expected.strip()
+    # add a second relation/command set
+    interface.commands.return_value = [command.copy(), command.copy()]
+    telegraf.exec_input(interface)
+    expected = expected +  expected
+    assert configs_dir().join('exec.conf').read().strip() == expected.strip()
+
+
+def test_exec_input_with_tags(mocker, monkeypatch):
+    interface = mocker.Mock(spec=RelationBase)
+    interface.commands = mocker.Mock()
+    commands = [{'commands': ['/srv/bin/test.sh', '/bin/true'],
+                 'data_format': 'json',
+                 'timeout': '5s',
+                 'run_on_this_unit': True,
+                 'tags': {'test': 'test'}}]
+    interface.commands.return_value = commands
+    telegraf.exec_input(interface)
+    expected = """
+[[inputs.exec]]
+  commands = ['/srv/bin/test.sh', '/bin/true']
+  data_format = "json"
+  timeout = "5s"
+  [inputs.exec.tags]
+    test = "test"
+"""
+    assert configs_dir().join('exec.conf').read().strip() == expected.strip()
+
+
+def test_exec_input_no_leader(mocker, monkeypatch):
+    interface = mocker.Mock(spec=RelationBase)
+    interface.commands = mocker.Mock()
+    commands = [{'commands': ['/srv/bin/test.sh', '/bin/true'],
+                 'data_format': 'json',
+                 'timeout': '5s',
+                 'run_on_this_unit': False}]
+    interface.commands.return_value = commands
+    telegraf.exec_input(interface)
+    assert not configs_dir().join('exec.conf').exists()
+
+
+def test_exec_input_all_units(mocker, monkeypatch):
+    interface = mocker.Mock(spec=RelationBase)
+    interface.commands = mocker.Mock()
+    commands = [{"commands": ["/srv/bin/test.sh", "/bin/true"],
+                 'data_format': 'json',
+                 'timeout': '5s',
+                 'run_on_this_unit': True}]
+    interface.commands.return_value = commands
+    telegraf.exec_input(interface)
+    expected = """
+[[inputs.exec]]
+  commands = ['/srv/bin/test.sh', '/bin/true']
+  data_format = "json"
+  timeout = "5s"
+"""
+    assert configs_dir().join('exec.conf').read().strip() == expected.strip()
+
+
+def test_exec_input_no_timeout_support(mocker, monkeypatch):
+    interface = mocker.Mock(spec=RelationBase)
+    interface.commands = mocker.Mock()
+    commands = [{'commands': ['/srv/bin/test.sh', '/bin/true'],
+                 'data_format': 'json',
+                 'timeout': '5s',
+                 'run_on_this_unit': True}]
+    interface.commands.return_value = commands
+    expected = """
+[[inputs.exec]]
+  commands = ['/srv/bin/test.sh', '/bin/true']
+  data_format = "json"
+"""
+    monkeypatch.setattr(telegraf, 'exec_timeout_supported', lambda: False)
+    telegraf.exec_input(interface)
+    assert configs_dir().join('exec.conf').read().strip() == expected.strip()
+
+
+def test_exec_input_departed(mocker, monkeypatch):
+    configs_dir().join('exec.conf').write('empty')
+    relations = [1]
+    monkeypatch.setattr(telegraf.hookenv, 'relations_of_type', lambda n: relations)
+    telegraf.exec_input_departed()
+    assert configs_dir().join('exec.conf').exists()
+    relations.pop()
+    telegraf.exec_input_departed()
+    assert not configs_dir().join('exec.conf').exists()
 
 
 def test_influxdb_api_output(monkeypatch, config):

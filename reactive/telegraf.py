@@ -2,6 +2,8 @@ import os
 import json
 import yaml
 
+import apt_pkg
+
 from charms.reactive import (
     helpers,
     when,
@@ -27,6 +29,17 @@ CONFIG_DIR = 'telegraf.d'
 
 
 # Utilities #
+def exec_timeout_supported():
+    apt_pkg.init()
+    apt_pkg.config.set("Dir::Cache::pkgcache", "")
+    cache = apt_pkg.Cache()
+    pkg = cache['telegraf']
+    timeout_support = True
+    if '0.12' in pkg.current_ver.ver_str:
+        timeout_support = False
+    return timeout_support
+
+
 def get_templates_dir():
     return os.path.join(hookenv.charm_dir(), 'templates')
 
@@ -60,11 +73,12 @@ def list_config_files():
 
 
 def get_remote_unit_name():
-    types = hookenv.relation_types()
-    for rel_type in types:
+    for rel_type in hookenv.metadata()['requires'].keys():
         rels = hookenv.relations_of_type(rel_type)
         if rels and len(rels) >= 1:
-            return rels[0]['__unit__']
+            rel = rels[0]
+            if rel['private-address'] == hookenv.unit_private_ip():
+                return rel['__unit__']
 
 
 def render_base_inputs():
@@ -225,7 +239,6 @@ def configure_extra_plugins():
 
 
 @when('elasticsearch.available')
-@when_not('plugins.elasticsearch.configured')
 def elasticsearch_input(es):
     template = """
 [[inputs.elasticsearch]]
@@ -254,7 +267,6 @@ def elasticsearch_input(es):
 
 
 @when('memcached.available')
-@when_not('plugins.memcached.configured')
 def memcached_input(memcache):
     template = """
 [[inputs.memcached]]
@@ -282,7 +294,6 @@ def memcached_input(memcache):
 
 
 @when('mongodb.database.available')
-@when_not('plugins.mongodb.configured')
 def mongodb_input(mongodb):
     template = """
 [[inputs.mongodb]]
@@ -311,7 +322,6 @@ def mongodb_input(mongodb):
 
 
 @when('postgresql.database.available')
-@when_not('plugins.postgresql.configured')
 def postgresql_input(db):
     template = """
 [[inputs.postgresql]]
@@ -337,7 +347,6 @@ def postgresql_input(db):
 
 
 @when('haproxy.available')
-@when_not('plugins.haproxy.configured')
 def haproxy_input(haproxy):
     template = """
 [[inputs.haproxy]]
@@ -378,7 +387,6 @@ def haproxy_input(haproxy):
 
 
 @when('apache.available')
-@when_not('plugins.apache.configured')
 def apache_input(apache):
     template = """
 [[inputs.apache]]
@@ -413,8 +421,58 @@ def apache_input(apache):
         os.unlink(config_path)
 
 
+@when('exec.available')
+def exec_input(exec_rel):
+    template = """
+{% for cmd in commands %}
+[[inputs.exec]]
+  commands = {{ cmd.commands }}
+  {% for key, value in cmd|dictsort %}
+      {% if key not in ["commands", "tags"] %}
+  {{ key }} = "{{ value }}"
+      {% endif %}
+  {% endfor %}
+  {% if cmd.tags %}
+  [inputs.exec.tags]
+    {% for tag, tag_value in cmd.tags|dictsort %}
+    {{ tag }} = "{{ tag_value }}"
+    {% endfor %}
+  {% endif %}
+
+{% endfor %}
+"""
+    config_path = '{}/{}.conf'.format(get_configs_dir(), 'exec')
+    commands = exec_rel.commands()
+    if not commands:
+        hookenv.log("No Commands defined in the exec relation, doing nothing.")
+        return
+    timeout_support = exec_timeout_supported()
+    pre_proc_cmds = []
+    for command in commands:
+        if not timeout_support:
+            command.pop('timeout')
+        run_on_this_unit = command.pop('run_on_this_unit')
+        if run_on_this_unit:
+            pre_proc_cmds.append(dict((k, v) for k, v in command.items()))
+    if pre_proc_cmds:
+        input_config = render_template(template, {'commands': pre_proc_cmds})
+        hookenv.log("Updating {} plugin config file".format('exec'))
+        host.write_file(config_path, input_config.encode('utf-8'))
+        set_state('plugins.exec.configured')
+
+
+@when_not('exec.available')
+@when('plugins.exec.configured')
+def exec_input_departed():
+    config_path = '{}/{}.conf'.format(get_configs_dir(), 'exec')
+    rels = hookenv.relations_of_type('exec')
+    if not rels:
+        remove_state('plugins.exec.configured')
+        if os.path.exists(config_path):
+            os.unlink(config_path)
+
+
 @when('influxdb-api.available')
-@when_not('plugins.influxdb-api.configured')
 def influxdb_api_output(influxdb):
     required_keys = ['hostname', 'port', 'user', 'password']
     rels = hookenv.relations_of_type('influxdb-api')
@@ -444,7 +502,6 @@ def influxdb_api_output(influxdb):
 
 
 @when('prometheus-client.available')
-@when_not('plugins.prometheus-client.configured')
 def prometheus_client(prometheus):
     template = """
 [[outputs.prometheus_client]]
@@ -464,7 +521,7 @@ def prometheus_client(prometheus):
     hookenv.log("Updating {} plugin config file".format('prometheus-client'))
     context = {"listen": listen}
     content = render_template(template, context) + \
-        render_extra_options("outputs", "prometheus-client")
+        render_extra_options("outputs", "prometheus_client")
     host.write_file(config_path, content.encode('utf-8'))
     set_state('plugins.prometheus-client.configured')
 
@@ -485,7 +542,13 @@ def prometheus_client_departed():
 def start_or_restart():
     states = sorted([k for k in get_states().keys()
                      if k.startswith('plugins') or k.startswith('extra_plugins')])
-    if helpers.any_file_changed(list_config_files()) or \
-            helpers.data_changed('active_plugins', states or ''):
+
+    config_files_changed = helpers.any_file_changed(list_config_files())
+    active_plugins_changed = helpers.data_changed('active_plugins', states or '')
+    if config_files_changed or active_plugins_changed:
         hookenv.log("Restarting telegraf")
         host.service_restart('telegraf')
+    else:
+        hookenv.log("Not restarting: active_plugins_changed={} | "
+                    "config_files_changed={}".format(active_plugins_changed,
+                                                     config_files_changed))

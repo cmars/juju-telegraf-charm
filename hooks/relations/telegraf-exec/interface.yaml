@@ -1,0 +1,4 @@
+name: telegraf-exec 
+summary: Interface to configure exec plugin from a service
+version: 1
+repo: https://git.launchpad.net/~verterok/charms/+source/interface-telegraf-exec

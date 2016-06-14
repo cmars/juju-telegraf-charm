@@ -52,7 +52,7 @@ options:
     description: "Run telegraf in quiet mode"
   hostname:
     type: string
-    default: ""
+    default: UNIT_NAME
     description: |
        Override default hostname, if empty use os.Hostname()
        Supports using UNIT_NAME as the value, and the charm will use a sanitized unit 
