@@ -40,14 +40,6 @@ class ExecRequires(RelationBase):
                 # by default run_on_this_unit is True, we risk to run the command
                 # everywhere than not running it at all
                 cmd['run_on_this_unit'] = cmd_info.pop('run_on_this_unit', True)
-                # other optional configs
-                optionals = ['name_suffix', 'name_prefix', 'name_override', 'tags',
-                             'interval',]
-                for key, value in cmd_info.items():
-                    if value:
-                        if key == 'tags':
-                            cmd[key] = json.loads(value)
-                        else:
-                            cmd[key] = value
+                cmd.update(cmd_info)
                 cmds.append(cmd)
         return cmds
