@@ -1,4 +1,5 @@
 """actions.py tests"""
+import base64
 import os
 import getpass
 import json
@@ -132,6 +133,25 @@ def test_inputs_config_set(monkeypatch, config):
 
     def check(*a, **kw):
         assert kw['context']['inputs'] == config['inputs_config']
+    monkeypatch.setattr(telegraf, 'render', check)
+    telegraf.configure_telegraf()
+
+
+def test_old_base64_inputs_and_outputs(monkeypatch, config):
+    config['inputs_config'] = base64.b64encode(b"""
+    [[inputs.cpu]]
+        percpu = true
+""").decode('utf-8')
+    config['outputs_config'] = base64.b64encode(b"""
+    [[outputs.fake]]
+        foo = true
+""").decode('utf-8')
+
+    def check(*a, **kw):
+        expected = base64.b64decode(config['inputs_config'])
+        assert kw['context']['inputs'] == expected
+        expected = base64.b64decode(config['outputs_config'])
+        assert kw['context']['outputs'] == expected
     monkeypatch.setattr(telegraf, 'render', check)
     telegraf.configure_telegraf()
 

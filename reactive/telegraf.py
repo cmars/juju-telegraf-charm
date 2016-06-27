@@ -1,3 +1,5 @@
+import base64
+import binascii
 import os
 import json
 import yaml
@@ -179,6 +181,19 @@ def configure_telegraf():
     context = config.copy()
     inputs = config.get('inputs_config', '')
     outputs = config.get('outputs_config', '')
+    # just for the migration out of base64
+    if inputs:
+        try:
+            inputs = base64.b64decode(inputs.encode('utf-8'), validate=True)
+        except binascii.Error:
+            # not bas64, probably already up to date configs
+            pass
+    if outputs:
+        try:
+            outputs = base64.b64decode(outputs.encode('utf-8'), validate=True)
+        except binascii.Error:
+            # not bas64, probably already up to date configs
+            pass
     tags = []
     if config['tags']:
         for tag in config['tags'].split(','):
