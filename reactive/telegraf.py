@@ -453,7 +453,7 @@ def exec_input(exec_rel):
             command.pop('timeout')
         run_on_this_unit = command.pop('run_on_this_unit')
         if run_on_this_unit:
-            pre_proc_cmds.append(dict((k, v) for k, v in command.items()))
+            pre_proc_cmds.append(command)
     if pre_proc_cmds:
         input_config = render_template(template, {'commands': pre_proc_cmds})
         hookenv.log("Updating {} plugin config file".format('exec'))
