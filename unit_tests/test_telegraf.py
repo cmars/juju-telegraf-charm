@@ -148,9 +148,9 @@ def test_old_base64_inputs_and_outputs(monkeypatch, config):
 """).decode('utf-8')
 
     def check(*a, **kw):
-        expected = base64.b64decode(config['inputs_config'])
+        expected = base64.b64decode(config['inputs_config']).decode('utf-8')
         assert kw['context']['inputs'] == expected
-        expected = base64.b64decode(config['outputs_config'])
+        expected = base64.b64decode(config['outputs_config']).decode('utf-8')
         assert kw['context']['outputs'] == expected
     monkeypatch.setattr(telegraf, 'render', check)
     telegraf.configure_telegraf()

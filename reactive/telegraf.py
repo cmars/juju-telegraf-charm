@@ -184,13 +184,13 @@ def configure_telegraf():
     # just for the migration out of base64
     if inputs:
         try:
-            inputs = base64.b64decode(inputs.encode('utf-8'), validate=True)
+            inputs = base64.b64decode(inputs.encode('utf-8'), validate=True).decode('utf-8')
         except binascii.Error:
             # not bas64, probably already up to date configs
             pass
     if outputs:
         try:
-            outputs = base64.b64decode(outputs.encode('utf-8'), validate=True)
+            outputs = base64.b64decode(outputs.encode('utf-8'), validate=True).decode('utf-8')
         except binascii.Error:
             # not bas64, probably already up to date configs
             pass
