@@ -13,8 +13,7 @@ class ExecRequires(RelationBase):
         conv = self.conversation()
         conv.set_state('{relation_name}.connected')
         commands_json_dict = conv.get_remote('commands') # list of commands to run
-        commands = json.loads(commands_json_dict)
-        if commands:
+        if commands_json_dict is not None and json.loads(commands_json_dict):
             conv.set_state('{relation_name}.available')
 
     @hook('{requires:telegraf-exec}-relation-{departed,broken}')
