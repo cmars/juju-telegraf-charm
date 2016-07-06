@@ -1,3 +1,20 @@
+{%- macro render_options(name, kind, options) %}
+  {%- if options[name] %}
+  {%- for key, value in options[name]|dictsort %}
+  {%- if key != 'tagpass' and key != 'tagdrop' %}
+  {{ key }} = {{ value }}
+  {%- endif %}
+  {%- endfor %}
+  {%- for key, value in options[name].items() %}
+  {%- if key == 'tagpass' or key == 'tagdrop' %}
+  [{{ kind }}.{{ name }}.{{ key }}]
+    {%- for tag, tagvalue in value.items() %}
+    {{ tag }} = {{ tagvalue }}
+    {%- endfor %}
+  {%- endif %}
+  {%- endfor %}
+  {%- endif %}
+{%- endmacro %}
 # This file is managed by Juju. Do not make local changes.
 
 # Telegraf configuration
@@ -62,6 +79,7 @@
 {% if prometheus_output_port %}
 [[outputs.prometheus_client]]
   listen = ":{{ prometheus_output_port }}"
+  {%- if extra_options['outputs']['prometheus_client'] %}{{ render_options('prometheus_client', 'outputs', extra_options['outputs']) }}{%- endif %}
 {%- endif %}
 
 ###############################################################################

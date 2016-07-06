@@ -243,6 +243,7 @@ def configure_telegraf():
     if get_prometheus_port():
         context["prometheus_output_port"] = get_prometheus_port()
         check_port("prometheus_output", get_prometheus_port())
+    context['extra_options'] = get_extra_options()
 
     hookenv.log("Updating main config file")
     render(source='telegraf.conf.tmpl', templates_dir=get_templates_dir(),
@@ -544,6 +545,11 @@ def prometheus_client(prometheus):
 [[outputs.prometheus_client]]
   listen = "{{ listen }}"
 """
+    if get_prometheus_port():
+        hookenv.log("Prometheus configured globally, skipping plugin setup")
+        prometheus.configure(get_prometheus_port())
+        # bail out, nothing more need to be configured here
+        return
     port = 9126
     extra_options = get_extra_options()
     options = extra_options['outputs'].get('prometheus-client', {})
@@ -553,12 +559,14 @@ def prometheus_client(prometheus):
         port = int(listen.split(":", 1)[1])
     else:
         listen = ":{}".format(port)
+    check_port("prometheus_output", get_prometheus_port())
     prometheus.configure(port)
     config_path = '{}/{}.conf'.format(get_configs_dir(), 'prometheus-client')
     hookenv.log("Updating {} plugin config file".format('prometheus-client'))
     context = {"listen": listen}
     content = render_template(template, context) + \
-        render_extra_options("outputs", "prometheus_client")
+        render_extra_options("outputs", "prometheus_client",
+                             extra_options=extra_options)
     host.write_file(config_path, content.encode('utf-8'))
     set_state('plugins.prometheus-client.configured')
 

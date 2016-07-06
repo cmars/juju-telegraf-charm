@@ -269,6 +269,80 @@ inputs:
     assert content[:len(expected)] == expected
 
 
+def test_check_port(monkeypatch):
+    open_ports = set()
+    monkeypatch.setattr(telegraf.hookenv, 'open_port',
+                        lambda p: open_ports.add(p))
+    telegraf.check_port('test_check_port', 10042)
+    assert 10042 in open_ports
+
+
+def test_check_port_replace_old_port(monkeypatch):
+    open_ports = set()
+    monkeypatch.setattr(telegraf.hookenv, 'open_port',
+                        lambda p: open_ports.add(p))
+    monkeypatch.setattr(telegraf.hookenv, 'close_port',
+                        lambda p: open_ports.remove(p))
+    telegraf.check_port('test_check_port', 10042)
+    assert 10042 in open_ports
+    telegraf.check_port('test_check_port', 10043)
+    assert 10043 in open_ports
+    assert 10042 not in open_ports
+
+
+def test_get_prometheus_port(monkeypatch, config):
+    config['prometheus_output_port'] = ''
+    assert telegraf.get_prometheus_port() is False
+    config['prometheus_output_port'] = 'default'
+    assert telegraf.get_prometheus_port() == 9103
+    config['prometheus_output_port'] = '9126'
+    assert telegraf.get_prometheus_port() == 9126
+
+
+def test_prometheus_global(monkeypatch, config):
+    open_ports = set()
+    monkeypatch.setattr(telegraf.hookenv, 'open_port',
+                        lambda p: open_ports.add(p))
+    monkeypatch.setattr(telegraf.hookenv, 'close_port',
+                        lambda p: open_ports.remove(p))
+    config['prometheus_output_port'] = 'default'
+    telegraf.configure_telegraf()
+    expected = """
+[[outputs.prometheus_client]]
+  listen = ":9103"
+"""
+    config_file = base_dir().join('telegraf.conf')
+    assert expected in config_file.read()
+
+
+def test_prometheus_global_with_extra_options(monkeypatch, config):
+    open_ports = set()
+    monkeypatch.setattr(telegraf.hookenv, 'open_port',
+                        lambda p: open_ports.add(p))
+    monkeypatch.setattr(telegraf.hookenv, 'close_port',
+                        lambda p: open_ports.remove(p))
+    config['prometheus_output_port'] = 'default'
+    config['extra_options'] = """
+outputs:
+  prometheus_client:
+    namedrop: ["aerospike*"]
+    tagpass:
+      cpu: ["cpu0"]
+
+"""
+    telegraf.configure_telegraf()
+    expected = """
+[[outputs.prometheus_client]]
+  listen = ":9103"
+  namedrop = ["aerospike*"]
+  [outputs.prometheus_client.tagpass]
+    cpu = ["cpu0"]
+"""
+    config_file = base_dir().join('telegraf.conf')
+    print(config_file.read())
+    assert expected in config_file.read()
+
+
 # Plugin tests
 
 
@@ -518,6 +592,8 @@ def test_influxdb_api_output(monkeypatch, config):
 
 
 def test_prometheus_client_output(mocker, monkeypatch, config):
+    monkeypatch.setattr(telegraf.hookenv, 'open_port',
+                        lambda p: None)
     interface = mocker.Mock(spec=RelationBase)
     interface.configure = mocker.Mock()
     telegraf.prometheus_client(interface)
@@ -603,6 +679,8 @@ def test_config_changed_extra_plugins(mocker, config):
 def test_restart_on_output_plugin_relation_departed(mocker, monkeypatch, config):
     service_restart = mocker.patch('reactive.telegraf.host.service_restart')
     monkeypatch.setattr(telegraf.hookenv, 'relations_of_type', lambda n: [])
+    monkeypatch.setattr(telegraf.hookenv, 'open_port',
+                        lambda p: None)
     bus.discover()
     bus.set_state('telegraf.installed')
     bus.set_state('telegraf.configured')
