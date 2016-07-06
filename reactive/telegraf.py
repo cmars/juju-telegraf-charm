@@ -10,14 +10,12 @@ from charms.reactive import (
     helpers,
     when,
     when_not,
-    when_file_changed,
     set_state,
     remove_state,
-    helpers,
 )
 from charms.reactive.bus import get_states
 
-from charmhelpers.core import hookenv, host
+from charmhelpers.core import hookenv, host, unitdata
 from charmhelpers.core.templating import render
 from charmhelpers.fetch import apt_install, apt_update, add_source
 
@@ -149,6 +147,26 @@ def render_template(template, context):
     return tmpl.render(**context)
 
 
+def check_port(key, new_port):
+    unitdata_key = '{}.port'.format(key)
+    kv = unitdata.kv()
+    if kv.get(unitdata_key) != new_port:
+        hookenv.open_port(new_port)
+        if kv.get(unitdata_key):  # Dont try to close non existing ports
+            hookenv.close_port(kv.get(unitdata_key))
+        kv.set(unitdata_key, new_port)
+
+
+def get_prometheus_port():
+    config = hookenv.config()
+    if not config.get('prometheus_output_port', False):
+        return False
+    if config.get('prometheus_output_port') == 'default':
+        return 9103
+    else:
+        return int(config.get('prometheus_output_port'))
+
+
 # States
 
 
@@ -222,6 +240,10 @@ def configure_telegraf():
             if os.path.exists(config_path):
                 os.unlink(config_path)
             return
+    if get_prometheus_port():
+        context["prometheus_output_port"] = get_prometheus_port()
+        check_port("prometheus_output", get_prometheus_port())
+
     hookenv.log("Updating main config file")
     render(source='telegraf.conf.tmpl', templates_dir=get_templates_dir(),
            target=config_path, context=context)

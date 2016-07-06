@@ -57,6 +57,12 @@ options:
        Override default hostname, if empty use os.Hostname()
        Supports using UNIT_NAME as the value, and the charm will use a sanitized unit 
        name, e.g: service_name-0
+  prometheus_output_port:
+    type: string
+    default: ""
+    description: |
+        If set prometheus output plugin will be configured to listen on the provided port.
+        If set to string "default" the charm will use default port (9103)
   inputs_config: 
     type: string
     default: ""
