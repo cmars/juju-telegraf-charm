@@ -9,6 +9,8 @@ includes:
     - interface:http
 options:
     basic:
+        use_venv: true
+        include_system_packages: true
         packages:
             - python3-yaml
 repo: https://git.launchpad.net/~verterok/charms/+source/telegraf
