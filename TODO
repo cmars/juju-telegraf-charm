@@ -1,0 +1,4 @@
+* nagios/nrpe support: check telegraf process is running
+* conn-check support(?): check we can access expected endpoints (for manually configured outputs, e.g: graphite)
+* add graphite output support via relation (there is no graphite/carbon interface, we need to define one)
+
