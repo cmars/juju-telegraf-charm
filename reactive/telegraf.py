@@ -559,7 +559,7 @@ def prometheus_client(prometheus):
         port = int(listen.split(":", 1)[1])
     else:
         listen = ":{}".format(port)
-    check_port("prometheus_output", get_prometheus_port())
+    check_port("prometheus_output", port)
     prometheus.configure(port)
     config_path = '{}/{}.conf'.format(get_configs_dir(), 'prometheus-client')
     hookenv.log("Updating {} plugin config file".format('prometheus-client'))
