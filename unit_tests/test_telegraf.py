@@ -299,6 +299,15 @@ def test_get_prometheus_port(monkeypatch, config):
     assert telegraf.get_prometheus_port() == 9126
 
 
+def test_get_statsd_port(monkeypatch, config):
+    config['statsd_input_port'] = ''
+    assert telegraf.get_statsd_port() is False
+    config['statsd_input_port'] = 'default'
+    assert telegraf.get_statsd_port() == 8125
+    config['statsd_input_port'] = '9925'
+    assert telegraf.get_statsd_port() == 9925
+
+
 def test_prometheus_global(monkeypatch, config):
     open_ports = set()
     monkeypatch.setattr(telegraf.hookenv, 'open_port',

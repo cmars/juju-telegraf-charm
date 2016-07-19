@@ -167,6 +167,16 @@ def get_prometheus_port():
         return int(config.get('prometheus_output_port'))
 
 
+def get_statsd_port():
+    config = hookenv.config()
+    if not config.get('statsd_input_port', False):
+        return False
+    if config.get('statsd_input_port') == 'default':
+        return 8125
+    else:
+        return int(config.get('statsd_input_port'))
+
+
 # States
 
 
@@ -262,6 +272,8 @@ def handle_config_changes():
     # if something else changed, let's reconfigure telegraf itself just in case
     if config.changed('extra_plugins'):
         remove_state('extra_plugins.configured')
+    if config.changed('statsd_input_port'):
+        remove_state('statsd_plugin.configured')
     remove_state('telegraf.configured')
 
 
@@ -274,6 +286,27 @@ def configure_extra_plugins():
         config_path = '{}/extra_plugins.conf'.format(get_configs_dir())
         host.write_file(config_path, plugins.encode('utf-8'))
         set_state('extra_plugins.configured')
+
+
+@when('telegraf.configured')
+@when_not('statsd_plugin.configured')
+def configure_statsd():
+    template = """
+[[inputs.statsd]]
+  service_address = "localhost:{{ port }}"
+"""
+    port = get_statsd_port()
+    config_path = '{}/statsd_plugin.conf'.format(get_configs_dir())
+    if not port:
+        if os.path.exists(config_path):
+            os.unlink(config_path)
+    else:
+        context = {"port": port}
+        input_config = render_template(template, context) + \
+            render_extra_options("inputs", "statsd")
+        hookenv.log("Updating {} plugin config file".format('statsd'))
+        host.write_file(config_path, input_config.encode('utf-8'))
+    set_state('statsd_plugin.configured')
 
 
 @when('elasticsearch.available')
